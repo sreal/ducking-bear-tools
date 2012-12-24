@@ -1,0 +1,20 @@
+<Project>
+
+  <Backup>
+    <database location='data-base-backup-folder-must_be_on_database_server' />
+    <site     location='website-backup-folder' />
+  </Backup>
+
+  <Database>
+    <user name='admin' password='password' />
+    <connection server='databaseserver' catalogue='database-name' />
+  </Database>
+
+  <Site>
+    <root location="website-root-location" />
+    <Include>
+      <path>*</path>
+    </Include>
+  </Site>
+
+</Project>
