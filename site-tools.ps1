@@ -35,8 +35,12 @@ Param(
 BEGIN TRY
     BEGIN TRANSACTION
 
-        USE [[catalogue]]
-        SELECT TOP 1 * from cmsContent
+USE [[catalogue]]
+
+        BACKUP DATABASE [[catalogue]]
+        TO DISK = '[[backup]]'
+            WITH FORMAT,
+              NAME = 'Full Backup of [[catalogue]] dated [[date]]'
 
     COMMIT TRAN
 END TRY
@@ -47,18 +51,33 @@ END CATCH
 GO
 "
 
+
   Write-Verbose 'Getting Configuration'
   $cfg = Get-Config $ConfigFile
 
   $super_usr = $cfg.Database.user.name
   $super_pwd = $cfg.Database.user.password
+  $backup_dir= $cfg.Database.backup.dir
   $server    = $cfg.Database.connection.server
   $catalogue = $cfg.Database.connection.catalogue
   $usr       = $cfg.Database.connection.username
-  $pwd        =$cfg.Database.connection.password
+  $pwd       = $cfg.Database.connection.password
+
+  $date      = Get-Date -Format yyyyMMdd
+  $time      = Get-Date -Format HHmm
+
+  Write-Verbose "Setting up backup location"
+  $backup_dir= "{0}\{1}" -F $backup_dir, $date
+  New-Item $backup_dir -Type Directory -ErrorAction SilentlyContinue
+
+  $backup    = "{0}\{1}{2}_{3}.bak" -F $backup_dir, $date, $time, $catalogue
+
 
   Write-Verbose "Injecting Config into Database Script"
   $SQL_database_backup = $SQL_database_backup.Replace( "[[catalogue]]", $catalogue)
+  $SQL_database_backup = $SQL_database_backup.Replace( "[[backup]]", $backup)
+  $SQL_database_backup = $SQL_database_backup.Replace( "[[date]]", (Get-Date -Format yyyyMMdd))
+  $SQL_database_backup = $SQL_database_backup.Replace( "[[time]]", (Get-Date -Format HHmm))
 
   Write-Verbose "Running SQL Command"
   $sql_result = sqlcmd -S $server -U $super_usr -P $super_pwd -Q $SQL_database_backup -V1
@@ -66,8 +85,17 @@ GO
   if (-not $sql_success ) {
     Write-Error "Sql did not run successfully"
     Write-Verbose "$sql_result"
+    Write-Verbose $SQL_database_backup
     Exit
   }
+
+  Write-Verbose "SQL Command Finished"
+  Write-Host "
+Database successfully backed up.
+Location
+  Server: $server
+  File:   $backup
+"
 
 }
 
