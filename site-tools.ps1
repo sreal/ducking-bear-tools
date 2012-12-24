@@ -18,17 +18,11 @@
 
 
 
+
 Function Backup-DataBase {
 [CmdletBinding()]
 Param(
-  [String] $ConfigFile,
-  [string] $Server,
-  [string] $Database,
-  [string] $Username,
-  [string] $Password,
-  [Switch] $Remote,
-  [string] $RemoteUsername,
-  [string] $RemotePassword
+  [String] $ConfigFile
 )
 
   $SQL_database_backup = "
