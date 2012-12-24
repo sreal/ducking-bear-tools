@@ -92,9 +92,12 @@ GO
   Write-Verbose "SQL Command Finished"
   Write-Host "
 Database successfully backed up.
-Location
+
+Location:
   Server: $server
   File:   $backup
+
+Thanks for playing...
 "
 
 }
