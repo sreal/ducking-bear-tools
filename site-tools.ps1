@@ -14,29 +14,71 @@
 #./psake Backup-Database -Parameters { 'config-file' = 'config/RAAF-stage.xml' }
 
 
+
+
+
+
 Function Backup-DataBase {
 [CmdletBinding()]
 Param(
-  [string] $Config-File,
+  [String] $ConfigFile,
   [string] $Server,
   [string] $Database,
   [string] $Username,
   [string] $Password,
   [Switch] $Remote,
-  [string] $Remote-Username,
-  [string] $Remote-Password
+  [string] $RemoteUsername,
+  [string] $RemotePassword
 )
+
+  $SQL_database_backup = "
+BEGIN TRY
+    BEGIN TRANSACTION
+
+        USE [[catalogue]]
+        SELECT TOP 1 * from cmsContent
+
+    COMMIT TRAN
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRAN
+END CATCH
+GO
+"
+
+  Write-Verbose 'Getting Configuration'
+  $cfg = Get-Config $ConfigFile
+
+  $super_usr = $cfg.Database.user.name
+  $super_pwd = $cfg.Database.user.password
+  $server    = $cfg.Database.connection.server
+  $catalogue = $cfg.Database.connection.catalogue
+  $usr       = $cfg.Database.connection.username
+  $pwd        =$cfg.Database.connection.password
+
+  Write-Verbose "Injecting Config into Database Script"
+  $SQL_database_backup = $SQL_database_backup.Replace( "[[catalogue]]", $catalogue)
+
+  Write-Verbose "Running SQL Command"
+  $sql_result = sqlcmd -S $server -U $super_usr -P $super_pwd -Q $SQL_database_backup -V1
+  $sql_success = $?
+  if (-not $sql_success ) {
+    Write-Error "Sql did not run successfully"
+    Write-Verbose "$sql_result"
+    Exit
+  }
 
 }
 
 
-Function Load-Config {
+Function Get-Config {
 [CmdletBinding()]
 Param(
-  [Parameter][String] $File    = 'default.xml',
+  [string]$File
 )
 
-  Write-Verbose Testing File Path $File
+  Write-Verbose "Testing File Path $File"
 
   if (-not (Test-Path $File) ) {
     Write-Error File Path Not Valid  [ $File ]
@@ -48,4 +90,4 @@ Param(
 }
 
 
-Backup-DataBase -Config-File 'config/test.xml'
+Backup-DataBase -ConfigFile "config/default.xml" -Verbose
