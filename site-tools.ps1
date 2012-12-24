@@ -8,6 +8,7 @@
 #
 
 
+
 Function Backup-Folder {
 [CmdletBinding()]
 Param(
@@ -151,9 +152,8 @@ Param(
 )
 
   Write-Verbose "Testing File Path $File"
-
   if (-not (Test-Path $File) ) {
-    Write-Error File Path Not Valid  [ $File ]
+    Write-Error "File Path Not Valid  [ $File ]"
     Exit
   }
 
@@ -162,6 +162,43 @@ Param(
 }
 
 
+Function Create-Schedule {
+[CmdletBinding()]
+Param(
+  [String] $ConfigFile
+)
+  Try {
+    Write-Verbose 'TEST'
+    $this_file = $PSCommandPath
 
+
+    Write-Verbose 'Getting Configuration'
+    $cfg = Get-Config $ConfigFile
+    $name = $cfg.Schedule.Job.name
+    $time = $cfg.Schedule.Job.time
+
+    Write-Verbose 'Creating Trigger'
+    $trigger = New-JobTrigger -Daily -At $time
+
+    Write-Verbose 'Creating Options'
+    $option = New-ScheduledJobOption -RunElevated
+
+
+    Write-Verbose 'Registering Job'
+    Register-ScheduledJob -Name $name -Trigger $trigger -ScheduledJobOption $option -ScriptBlock {
+      powershell -noexit -command {
+        . $this_file
+        Backup-Folder   -ConfigFile $ConfigFile
+        Backup-Database -ConfigFile $ConfigFile
+      }
+    }
+
+  } Catch [Exception] {
+    Write-Error $_.Exception.Message
+    Write-Error $_.Exception.StackTrace
+  }
+}
+
+Create-Schedule -ConfigFile "configs/default.xml" -Verbose
 #Backup-Folder    -ConfigFile "default.xml" -Verbose
 #Backup-DataBase  -ConfigFile "default.xml" -Verbose

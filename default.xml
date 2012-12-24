@@ -1,5 +1,9 @@
 <Project>
 
+  <Schedule>
+    <Job name='schdule-job-name' time='time eg 1:00PM' />
+  </Schedule>
+
   <Backup>
     <database location='data-base-backup-folder-must_be_on_database_server' />
     <site     location='website-backup-folder' />
