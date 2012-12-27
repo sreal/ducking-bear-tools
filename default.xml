@@ -19,6 +19,11 @@
     <Include>
       <path>*</path>
     </Include>
+    <Setup>
+      <Scripts>
+        <powershell file='[[BASE]]\script.ps1' arguments='[[BASE]]' /> <!-- [[BASE]] is the base of the folder being restored -->
+      </Scripts>
+    </Setup>
   </Site>
 
 </Project>
