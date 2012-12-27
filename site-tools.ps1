@@ -5,14 +5,13 @@
 # ./Backup-Database -Config-File CONFIG.XML
 # ./Backup-Folder   -Config-File CONFIG.XML
 #
-#
-
+# Requirements: PowerShell v3 [PSScheduledJob]
 
 
 Function Backup-Folder {
 [CmdletBinding()]
 Param(
-  [String] $ConfigFile
+  [Parameter(Mandatory=$true)][String] $ConfigFile
 )
   Try {
     Write-Verbose 'Getting Configuration'
@@ -22,8 +21,6 @@ Param(
     $files     = $cfg.Site.Include
 
     $backup_dir= Setup-Destination-Directory $backup_dir -create
-
-
     Write-Verbose "Copy File Includes"
     $files | % {
       $path = Join-Path $root_dir $_.path
@@ -60,24 +57,12 @@ Function Backup-DataBase {
 Param(
   [String] $ConfigFile
 )
-
   $SQL_database_backup = "
-BEGIN TRY
-    BEGIN TRANSACTION
-
 USE [[catalogue]]
-
-        BACKUP DATABASE [[catalogue]]
-        TO DISK = '[[backup]]'
-            WITH FORMAT,
-              NAME = 'Full Backup of [[catalogue]] to [[backup]]'
-
-    COMMIT TRAN
-END TRY
-BEGIN CATCH
-    IF @@TRANCOUNT > 0
-        ROLLBACK TRAN
-END CATCH
+BACKUP DATABASE [[catalogue]]
+    TO DISK = '[[backup]]'
+        WITH FORMAT,
+            NAME = 'Full Backup of [[catalogue]] to [[backup]]'
 GO
 "
 
@@ -99,23 +84,21 @@ GO
   $backup_dir= Setup-Destination-Directory $backup_dir
   $backup    = "{0}\{1}{2}_{3}.bak" -F $backup_dir, $date, $time, $catalogue
 
-
   Write-Verbose "Injecting Config into Database Script"
   $SQL_database_backup = $SQL_database_backup.Replace( "[[catalogue]]", $catalogue)
   $SQL_database_backup = $SQL_database_backup.Replace( "[[backup]]", $backup)
 
   Write-Verbose "Running SQL Backup Command"
+
   $sql_result = sqlcmd -S $server -U $super_usr -P $super_pwd -Q $SQL_database_backup -V1
   $sql_success = $?
   if (-not $sql_success ) {
     Write-Error "Sql did not run successfully"
     Write-Verbose "$sql_result"
-    Write-Verbose $SQL_database_backup
-    Exit
-  }
+    Write-Debug $SQL_database_backup
+  } else {
 
-  Write-Verbose "SQL Backup Command Finished"
-  Write-Host "
+    Write-Host "
 Database successfully backed up.
 
 Location:
@@ -124,7 +107,7 @@ Location:
 
 Thanks for playing...
 "
-
+  }
 }
 
 
@@ -150,13 +133,10 @@ Function Get-Config {
 Param(
   [string]$File
 )
-
-  Write-Verbose "Testing File Path $File"
   if (-not (Test-Path $File) ) {
     Write-Error "File Path Not Valid  [ $File ]"
     Exit
   }
-
   [xml]$xml = Get-Content $File
   return $xml.Project
 }
@@ -165,17 +145,21 @@ Param(
 Function Create-Schedule {
 [CmdletBinding()]
 Param(
-  [String] $ConfigFile
+  [Parameter(Mandatory=$true)][String] $ConfigFile
 )
   Try {
-    Write-Verbose 'TEST'
-    $this_file = $PSCommandPath
+    Import-Module PSScheduledJob
 
+    $this_file = $PSCommandPath
 
     Write-Verbose 'Getting Configuration'
     $cfg = Get-Config $ConfigFile
     $name = $cfg.Schedule.Job.name
     $time = $cfg.Schedule.Job.time
+
+    Write-Verbose 'Unregistering Job'
+    Unregister-ScheduledJob $name -ErrorAction SilentlyContinue
+
 
     Write-Verbose 'Creating Trigger'
     $trigger = New-JobTrigger -Daily -At $time
@@ -183,22 +167,16 @@ Param(
     Write-Verbose 'Creating Options'
     $option = New-ScheduledJobOption -RunElevated
 
-
     Write-Verbose 'Registering Job'
-    Register-ScheduledJob -Name $name -Trigger $trigger -ScheduledJobOption $option -ScriptBlock {
-      powershell -noexit -command {
+    Register-ScheduledJob -Name $name -Trigger $trigger  -ArgumentList $ConfigFile,$this_file  -ScriptBlock {
+        $ConfigFile,$this_file = $args
         . $this_file
         Backup-Folder   -ConfigFile $ConfigFile
         Backup-Database -ConfigFile $ConfigFile
       }
-    }
-
   } Catch [Exception] {
-    Write-Error $_.Exception.Message
-    Write-Error $_.Exception.StackTrace
+  } Finally {
+    Remove-Module PSScheduledJob
   }
-}
 
-Create-Schedule -ConfigFile "configs/default.xml" -Verbose
-#Backup-Folder    -ConfigFile "default.xml" -Verbose
-#Backup-DataBase  -ConfigFile "default.xml" -Verbose
+}
