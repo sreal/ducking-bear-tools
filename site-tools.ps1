@@ -7,16 +7,16 @@
 #
 # Requirements: PowerShell v3 [PSScheduledJob]
 
- Function Restore-Folder {
- [CmdletBinding()]
- Param(
-   [Parameter(Mandatory=$true)][String] $ConfigFile,
-   [Parameter(Mandatory=$true)][String] $FolderToRestore,
-   [Switch] $IgnoreBackup,
-   [Switch] $IgnoreRemove
- )
+Function Restore-Folder {
+[CmdletBinding()]
+Param(
+  [Parameter(Mandatory=$true)][String] $ConfigFile,
+  [Parameter(Mandatory=$true)][String] $FolderToRestore,
+  [Switch] $IgnoreBackup,
+  [Switch] $IgnoreRemove
+)
 
-#  Try {
+  Try {
     Write-Verbose 'Getting Configuration'
     $cfg = Get-Config $ConfigFile
     $environment = $cfg.Site.Setup.environment
@@ -43,27 +43,22 @@
     Write-Verbose 'Copying Backup Folder to Root Folder'
     Copy-Item -Recurse $FolderToRestore $root_dir -Force
 
-
-#    while ($responce -ne 'y') {
-#      $responce = Read-Host '''
-#Have you made the file changes required?
-#For Example. Updates to the web.config. (y to continue)'
-#    }
-
-
+    while ($responce -ne 'y') {
+      $responce = Read-Host '''
+Have you made the file changes required?
+For Example. Updates to the web.config. (y to continue)'
+    }
 
     Write-Verbose 'Running Addition Setup Scripts'
     foreach ($script in $psScripts) {
       $file = $script.file -Replace '\[\[BASE\]\]', $root_dir
       $arguments = $script.arguments -Replace '\[\[BASE\]\]', $root_dir
       if (Test-Path $file) {
-#        Invoke-Command -FilePath $file -ArgumentList ($arguments)
         &"$file $args"
+        Write-Verbose "Script run [$file $args]"
       } else {
         Write-Verbose "Script not found [$file]"
       }
-
-
     }
 
     Write-Verbose "Folder Restore Completed"
@@ -75,10 +70,9 @@ Location:
 
 Thanks for playing...
 "
-
-  # } Catch [Exception] {
-  #   Write-Error $_.Exception.Message
-  # }
+   } Catch [Exception] {
+     Write-Error $_.Exception.Message
+   }
 }
 
 
@@ -94,17 +88,13 @@ Param(
     $root_dir  = $cfg.Site.root.location
     $files     = $cfg.Site.Include
 
-
     $backup_dir= Setup-Destination-Directory $backup_dir -Create -Date
     $backup_dir = Join-Path $backup_dir ("site-{0}" -f (Get-Date -Format yyyyMMddHHmm))
     $backup_dir= Setup-Destination-Directory $backup_dir -Create
 
-
-
     Write-Verbose "Copy File Includes"
     $files | % {
       $path = Join-Path $root_dir $_.path
-Write-Verbose "$path"
       if ( -not (Test-Path $path) ) {
           Write-Error "Path Not Found [$path]"
           Return
@@ -143,56 +133,57 @@ Function Backup-DataBase {
 Param(
   [String] $ConfigFile
 )
-  $SQL_database_backup = "
-USE [[catalogue]]
-BACKUP DATABASE [[catalogue]]
-    TO DISK = '[[backup]]'
-        WITH FORMAT,
-            NAME = 'Full Backup of [[catalogue]] to [[backup]]'
-GO
-"
+  Try {
+    $SQL_database_backup = "
+  USE [[catalogue]]
+  BACKUP DATABASE [[catalogue]]
+      TO DISK = '[[backup]]'
+          WITH FORMAT,
+              NAME = 'Full Backup of [[catalogue]] to [[backup]]'
+  GO
+  "
+    Write-Verbose 'Getting Configuration'
+    $cfg = Get-Config $ConfigFile
 
+    $super_usr = $cfg.Database.user.name
+    $super_pwd = $cfg.Database.user.password
+    $server    = $cfg.Database.connection.server
+    $catalogue = $cfg.Database.connection.catalogue
+    $usr       = $cfg.Database.connection.username
+    $pwd       = $cfg.Database.connection.password
+    $backup_dir= $cfg.Backup.database.location
 
-  Write-Verbose 'Getting Configuration'
-  $cfg = Get-Config $ConfigFile
+    $date      = Get-Date -Format yyyyMMdd
+    $time      = Get-Date -Format HHmm
 
-  $super_usr = $cfg.Database.user.name
-  $super_pwd = $cfg.Database.user.password
-  $server    = $cfg.Database.connection.server
-  $catalogue = $cfg.Database.connection.catalogue
-  $usr       = $cfg.Database.connection.username
-  $pwd       = $cfg.Database.connection.password
-  $backup_dir= $cfg.Backup.database.location
+    $backup_dir= Setup-Destination-Directory $backup_dir -Date
+    $backup    = "{0}\{1}{2}_{3}.bak" -F $backup_dir, $date, $time, $catalogue
 
-  $date      = Get-Date -Format yyyyMMdd
-  $time      = Get-Date -Format HHmm
+    Write-Verbose "Injecting Config into Database Script"
+    $SQL_database_backup = $SQL_database_backup.Replace( "[[catalogue]]", $catalogue)
+    $SQL_database_backup = $SQL_database_backup.Replace( "[[backup]]", $backup)
 
-  $backup_dir= Setup-Destination-Directory $backup_dir -Date
-  $backup    = "{0}\{1}{2}_{3}.bak" -F $backup_dir, $date, $time, $catalogue
+    Write-Verbose "Running SQL Backup Command"
+    $sql_result = sqlcmd -S $server -U $super_usr -P $super_pwd -Q $SQL_database_backup -V1
+    $sql_success = $?
+    if (-not $sql_success ) {
+      Write-Error "Sql did not run successfully"
+      Write-Verbose "$sql_result"
+      Write-Debug $SQL_database_backup
+    } else {
 
-  Write-Verbose "Injecting Config into Database Script"
-  $SQL_database_backup = $SQL_database_backup.Replace( "[[catalogue]]", $catalogue)
-  $SQL_database_backup = $SQL_database_backup.Replace( "[[backup]]", $backup)
+      Write-Host "
+  Database successfully backed up.
 
-  Write-Verbose "Running SQL Backup Command"
+  Location:
+    Server: $server
+    File:   $backup
 
-  $sql_result = sqlcmd -S $server -U $super_usr -P $super_pwd -Q $SQL_database_backup -V1
-  $sql_success = $?
-  if (-not $sql_success ) {
-    Write-Error "Sql did not run successfully"
-    Write-Verbose "$sql_result"
-    Write-Debug $SQL_database_backup
-  } else {
-
-    Write-Host "
-Database successfully backed up.
-
-Location:
-  Server: $server
-  File:   $backup
-
-Thanks for playing...
-"
+  Thanks for playing...
+  "
+    }
+  } Catch [Exception] {
+    Write-Error $_.Exception.Message
   }
 }
 
@@ -249,7 +240,6 @@ Param(
     Write-Verbose 'Unregistering Job'
     Unregister-ScheduledJob $name -ErrorAction SilentlyContinue
 
-
     Write-Verbose 'Creating Trigger'
     $trigger = New-JobTrigger -Daily -At $time
 
@@ -267,7 +257,6 @@ Param(
   } Finally {
     Remove-Module PSScheduledJob
   }
-
 }
 
 
