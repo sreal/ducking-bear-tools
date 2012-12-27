@@ -7,6 +7,81 @@
 #
 # Requirements: PowerShell v3 [PSScheduledJob]
 
+ Function Restore-Folder {
+ [CmdletBinding()]
+ Param(
+   [Parameter(Mandatory=$true)][String] $ConfigFile,
+   [Parameter(Mandatory=$true)][String] $FolderToRestore,
+   [Switch] $IgnoreBackup,
+   [Switch] $IgnoreRemove
+ )
+
+#  Try {
+    Write-Verbose 'Getting Configuration'
+    $cfg = Get-Config $ConfigFile
+    $environment = $cfg.Site.Setup.environment
+    $root_dir    = $cfg.Site.root.location
+    $psScripts     = $cfg.Site.Setup.Scripts.powershell
+
+
+    Write-Verbose 'Validating Folder'
+    if (-not ( Test-Path $FolderToRestore) ) {
+      Write-Error "FolderToRestore not found. [$FolderToRestore]"
+      Return
+    }
+
+    if (-not $IgnoreBackup) {
+      Write-Verbose 'Backing up Current Site'
+      Backup-Folder $ConfigFile -ErrorAction Continue
+    }
+
+    if (-not $IgnoreRemove) {
+      Write-Verbose 'Removing Root Folder'
+      Remove-Item -Recurse -Force $root_dir
+    }
+
+    Write-Verbose 'Copying Backup Folder to Root Folder'
+    Copy-Item -Recurse $FolderToRestore $root_dir -Force
+
+
+#    while ($responce -ne 'y') {
+#      $responce = Read-Host '''
+#Have you made the file changes required?
+#For Example. Updates to the web.config. (y to continue)'
+#    }
+
+
+
+    Write-Verbose 'Running Addition Setup Scripts'
+    foreach ($script in $psScripts) {
+      $file = $script.file -Replace '\[\[BASE\]\]', $root_dir
+      $arguments = $script.arguments -Replace '\[\[BASE\]\]', $root_dir
+      if (Test-Path $file) {
+#        Invoke-Command -FilePath $file -ArgumentList ($arguments)
+        &"$file $args"
+      } else {
+        Write-Verbose "Script not found [$file]"
+      }
+
+
+    }
+
+    Write-Verbose "Folder Restore Completed"
+    Write-Host "
+  Folder restored.
+
+Location:
+  Root Directory:   $root_dir
+
+Thanks for playing...
+"
+
+  # } Catch [Exception] {
+  #   Write-Error $_.Exception.Message
+  # }
+}
+
+
 Function Backup-Folder {
 [CmdletBinding()]
 Param(
@@ -25,9 +100,16 @@ Param(
     $backup_dir= Setup-Destination-Directory $backup_dir -Create
 
 
+
     Write-Verbose "Copy File Includes"
     $files | % {
       $path = Join-Path $root_dir $_.path
+Write-Verbose "$path"
+      if ( -not (Test-Path $path) ) {
+          Write-Error "Path Not Found [$path]"
+          Return
+      }
+
       if ($_.path -eq '*') {
           Copy-Item $path $backup_dir -Recurse -Force
       } else {
@@ -187,3 +269,7 @@ Param(
   }
 
 }
+
+
+Clear-host
+Restore-Folder -ConfigFile configs/default.xml -FolderToRestore "C:\projects\tmp\umbraco\tmp\20121227\site-201212271455" -Verbose -IgnoreBackup -IgnoreRemove
