@@ -7,7 +7,6 @@
 #
 # Requirements: PowerShell v3 [PSScheduledJob]
 
-
 Function Backup-Folder {
 [CmdletBinding()]
 Param(
@@ -22,7 +21,7 @@ Param(
 
 
     $backup_dir= Setup-Destination-Directory $backup_dir -Create -Date
-    $backup_dir = Join-Path $backup_dir site
+    $backup_dir = Join-Path $backup_dir ("site-{0}" -f (Get-Date -Format yyyyMMddHHmm))
     $backup_dir= Setup-Destination-Directory $backup_dir -Create
 
 
