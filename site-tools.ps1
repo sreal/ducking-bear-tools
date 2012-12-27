@@ -1,4 +1,4 @@
-##
+ ##
 # . ./site_tools.ps1
 # sre, 2012-12-24
 #
@@ -20,7 +20,12 @@ Param(
     $root_dir  = $cfg.Site.root.location
     $files     = $cfg.Site.Include
 
-    $backup_dir= Setup-Destination-Directory $backup_dir -create
+
+    $backup_dir= Setup-Destination-Directory $backup_dir -Create -Date
+    $backup_dir = Join-Path $backup_dir site
+    $backup_dir= Setup-Destination-Directory $backup_dir -Create
+
+
     Write-Verbose "Copy File Includes"
     $files | % {
       $path = Join-Path $root_dir $_.path
@@ -81,7 +86,7 @@ GO
   $date      = Get-Date -Format yyyyMMdd
   $time      = Get-Date -Format HHmm
 
-  $backup_dir= Setup-Destination-Directory $backup_dir
+  $backup_dir= Setup-Destination-Directory $backup_dir -Date
   $backup    = "{0}\{1}{2}_{3}.bak" -F $backup_dir, $date, $time, $catalogue
 
   Write-Verbose "Injecting Config into Database Script"
@@ -115,11 +120,14 @@ Function Setup-Destination-Directory {
 [CmdletBinding()]
 Param(
   [string] $Directory,
-  [switch] $create
+  [switch] $Create,
+  [switch] $Date
 )
   Write-Verbose "Setting up backup location"
-  $Directory= "{0}\{1}" -F $Directory, (Get-Date -F yyyyMMdd)
-  if ($create) {
+  if ($Date) {
+    $Directory= "{0}\{1}" -F $Directory, (Get-Date -F yyyyMMdd)
+  }
+  if ($Create) {
     if (-not (Test-Path $Directory) ) {
       New-Item $Directory -Type Directory | Out-Null
     }
