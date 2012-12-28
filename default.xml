@@ -11,7 +11,10 @@
 
   <Database>
     <user name='admin' password='password' />
-    <connection server='databaseserver' catalogue='database-name' />
+    <connection server='databaseserver' catalogue='database-name' username='db-user-to-sync' password='db-login-password'/>
+    <Files>
+      <mdf location='mdf-location-must_be_on_database_server' />
+      <ldf location='ldf-location-must_be_on_database_server'>
   </Database>
 
   <Site>
