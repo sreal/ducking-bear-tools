@@ -125,6 +125,13 @@ RESTORE DATABASE [[catalogue]]
     WITH MOVE @mdf TO N'[[mdf_path]]',
          MOVE @ldf TO N'[[ldf_path]]',
          REPLACE
+
+DECLARE @rename varchar(255)
+SELECT  @rename = 'ALTER DATABASE [[catalogue]]  MODIFY FILE  ( NAME = ' + @mdf + ', NEWNAME = [[mdf_name]])'
+EXEC   (@rename)
+
+SELECT  @rename = 'ALTER DATABASE [[catalogue]]  MODIFY FILE  ( NAME = ' + @ldf + ', NEWNAME = [[ldf_name]])'
+EXEC (@rename)
 GO
 
 -- Create User or Sync
@@ -176,6 +183,8 @@ GO
      $SQL_restore_sync = $SQL_restore_sync.Replace( "[[password]]",     $password      )
 
      Write-Verbose "Running SQL Backup Command"
+     Write-Verbose "$SQL_restore_sync"
+
      $sql_result = sqlcmd -S $server -U $super_usr -P $super_pwd -Q $SQL_restore_sync -V1
      $sql_success = $?
      if (-not $sql_success ) {
@@ -389,4 +398,4 @@ Param(
 Clear-host
 #Restore-Database -ConfigFile configs/default.xml
 Restore-Database -ConfigFile configs/default.xml -DatabaseBackup "D:\Backup\boo.bak" -Verbose
-Restore-Folder   -ConfigFile configs/default.xml -Folder "C:\projects\tmp\umbraco\tmp\20121227\site-201212271627" -verbose
+#Restore-Folder   -ConfigFile configs/default.xml -Folder "C:\projects\tmp\umbraco\tmp\20121227\site-201212271627" -verbose
