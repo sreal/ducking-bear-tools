@@ -174,7 +174,7 @@ Param (
     return $name
   }
 
-  #NOTE. Be aware, this assumes ALL FILES are in the TOP leve. ie no directories or nesting
+  #NOTE. Be aware, this assumes ALL FILES are in the TOP level. ie no directories or nesting
   $files = @()
   $files_match | % {
     $m = $_
@@ -245,7 +245,8 @@ Param (
   $release_share = $release_share -Replace '\[\[DATETIME\]\]', (Get-Date -f yyyyMMddHHmm)
   $remote_user   = $env_config.RemoteUser
   $remote_pass   = $env_config.RemotePassword
-  $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass))
+  $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass)
+  $remote_pass   = $remote_pass.SubString( $Environment.Length ) #EnvironmentPassword - Environment is the salt
 
   Write-Verbose "gateway:       $gateway"
   Write-Verbose "release:       $release"
@@ -305,6 +306,7 @@ Param( )
   $remote_user   = $env_config.RemoteUser
   $remote_pass   = $env_config.RemotePassword
   $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass))
+  $remote_pass   = $remote_pass.SubString( $environment.Length ) #EnvironmentPassword - Environment is the salt
 
   Write-Verbose "release:       $release"
   Write-Verbose "release_share: $release_share"
@@ -403,7 +405,7 @@ Run the installer for the current environment
 #>
 Function Run-Installer {
 [CmdLetBinding()]
-Param()
+Param( [System.Management.Automation.ActionPreference] $VerbosePreference )
   Write-Host "Run-Installer"
   $config = Get-RTConfig
 
@@ -413,6 +415,8 @@ Param()
   $remote_user   = $env_config.RemoteUser
   $remote_pass   = $env_config.RemotePassword
   $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass))
+  $remote_pass   = $remote_pass.SubString( $environment.Length ) #EnvironmentPassword - Environment is the salt
+
   Write-Verbose "environment:   $environment"
   Write-Verbose "remote_user:   $remote_user"
 
@@ -447,20 +451,24 @@ Param()
         Write-Verbose "Trying to match in directory $latest_scripts"
 
 
+        $path_query = Join-Path  $latest_scripts $install_script_format
+        Write-Verbose "Trying to match path query $path_query"
 
-        $latest_file = Get-ChildItem $latest_scripts | ? { $_.Name -like $install_script_format }
+        $latest_file = Get-ChildItem $path_query
+
         $type = $_.Type
         Write-Verbose "Install Format $latest_file"
 
         $path = Join-Path $install_location $latest
         $path = $path -Replace '\$',':'
 
-        Invoke-Command -ComputerName $install_server -ArgumentList $latest_file,$path,$type -Credential $credentials -Authentication CredSSP -ScriptBlock {
+        Invoke-Command -ComputerName $install_server -ArgumentList $latest_file,$path,$type,$VerbosePreference -Credential $credentials -Authentication CredSSP -ScriptBlock {
           Param (
             $latest_file,
             $path,
-            [string] $type
-          )
+            [string] $type,
+			[System.Management.Automation.ActionPreference] $VerbosePreference          
+)
 
 
           Write-Verbose "Current path stored $inital_location"
