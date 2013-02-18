@@ -17,7 +17,7 @@
 .SYNOPSIS
 Load configuration values.
 .DESCRIPTION
-Get-Config loads the xml configuration values from ./remove-install-tools.ps1.xml and returns the configuration node.
+Get-RTConfig loads the xml configuration values from ./remove-install-tools.ps1.xml and returns the configuration node.
 The configuration files is expected to be neamed <this-file-name-with-extension>.xml
 This is expected to only be called in this file.
 Basic xml format is:
@@ -33,7 +33,7 @@ Basic xml format is:
                    ReleaseBox='[[release-box]]'
                    ReleaseShare='[[storage-on-release-server_can-use-[[DATETIME]]'
                    RemoteUser="[[domain]]\[[username]]"
-                   RemotePassword="[[password]]" />
+                   RemotePassword="[[password_as_b64]]" />
     </Environments>
     <!-- list the files that are created by the build server in releaseDirectory -->
     <ReleaseFiles>
@@ -47,10 +47,10 @@ Basic xml format is:
   </Configuration>
 .EXAMPLE
 Load the configuration file
-  $config = Get-Config
+  $config = Get-RTConfig
   $build_server_release_directory = $config.BuildServer.releaseDirectory
 #>
-Function Get-Config {
+Function Get-RTConfig {
 [CmdletBinding()]
 Param ()
   $config_path =  $MyInvocation.ScriptName + ".xml"
@@ -76,16 +76,16 @@ Get the environment section from configuration
 Get just the environment object required from a complete configuration xml object.
 This is expected to only be called in this file.
 .Parameter Config
-The configuration object. This can be aquired with Get-Config
+The configuration object. This can be aquired with Get-RTConfig
 .Parameter Name
 The name or regular expression to be used when trying to match the environment name
 .Parameter IsRegex
-Switch to expect a regex as the name match and to use the RegexId valus in the configuration (See 'Get-Help Get-Config' for configuration xml format)
+Switch to expect a regex as the name match and to use the RegexId valus in the configuration (See 'Get-Help Get-RTConfig' for configuration xml format)
 .EXAMPLE
 Get the environment using regex
-  Get-Environment-Config $MyConfigObject '^[tT]est[eE]nv' -IsRegex
+  Get-RTEnvironment-Config $MyConfigObject '^[tT]est[eE]nv' -IsRegex
 #>
-Function Get-Environment-Config {
+Function Get-RTEnvironment-Config {
 [CmdletBinding()]
 Param ( $Config,
         [string] $Name,
@@ -146,7 +146,7 @@ Param (
   [Parameter(Mandatory=$true)][string] $Environment
 )
   Write-Host "Copy-Build-To-Gateway $Environment"
-  $config = Get-Config
+  $config = Get-RTConfig
 
   $latest = Get-ChildItem $config.BuildServer.releaseDirectory | Sort-Object Name -Descending | Select-Object -First 1
   Write-Verbose "Latest build directory $latest"
@@ -156,7 +156,7 @@ Param (
   }
 
   $latest = $latest.FullName
-  $env_config = Get-Environment-Config $config $Environment
+  $env_config = Get-RTEnvironment-Config $config $Environment
 
 
   $gateway       = $env_config.GatewayBox
@@ -236,8 +236,8 @@ Param (
   [Parameter(Mandatory=$true)] $Files
 )
   Write-Host "Move-To-Release $Environment $Files"
-  $config = Get-Config
-  $env_config = Get-Environment-Config $config $Environment
+  $config = Get-RTConfig
+  $env_config = Get-RTEnvironment-Config $config $Environment
 
   $gateway       = $env_config.GatewayBox
   $release       = $env_config.ReleaseBox
@@ -245,6 +245,7 @@ Param (
   $release_share = $release_share -Replace '\[\[DATETIME\]\]', (Get-Date -f yyyyMMddHHmm)
   $remote_user   = $env_config.RemoteUser
   $remote_pass   = $env_config.RemotePassword
+  $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass))
 
   Write-Verbose "gateway:       $gateway"
   Write-Verbose "release:       $release"
@@ -294,8 +295,8 @@ Function Expand-Latest-Release-Scripts {
 [CmdletBinding()]
 Param( )
   Write-Host "Expand-Latest-Release-Scripts"
-  $config = Get-Config
-  $env_config = Get-Environment-Config $config $env:COMPUTERNAME -IsRegex
+  $config = Get-RTConfig
+  $env_config = Get-RTEnvironment-Config $config $env:COMPUTERNAME -IsRegex
 
   $environment   = $env_config.Name
   $release       = $env_config.ReleaseBox
@@ -303,6 +304,8 @@ Param( )
   $release_share = $release_share -Replace '\[\[DATETIME\]\]', ''
   $remote_user   = $env_config.RemoteUser
   $remote_pass   = $env_config.RemotePassword
+  $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass))
+
   Write-Verbose "release:       $release"
   Write-Verbose "release_share: $release_share"
   Write-Verbose "remote_user:   $remote_user"
@@ -324,23 +327,23 @@ Param( )
     $file = $_
     Write-Verbose "Getting installer script details"
 
-    
+
     $install_servers    = $file.InstallServer.Split(",")
     $install_location   = $file.InstallLocation
-    
-    
+
+
     $install_servers | % {
       $install_server = $_
       $install_script_share = Join-Path "\\$install_server" $install_location
-      
+
       Write-Verbose "Installer script location  $install_script_share"
-      
+
       $install_container_format    = $file.Format
       $install_container_format    = $install_container_format -Replace '\[\[DATETIME\]\]', '*'
       $install_container_format    = $install_container_format -Replace '\[\[VERSION\]\]', '*'
       $install_container_format    = $install_container_format -Replace '\[\[ENVIRONMENT\]\]', $environment
       Write-Verbose "Installer container format $install_container_format"
-      
+
       $latest_install_container = Get-ChildItem $latest_sharepath | ? { $_.Name -like "$install_container_format" }
       if ($latest_install_container -eq $null) {
         Write-Verbose "$latest_sharepath"
@@ -350,15 +353,15 @@ Param( )
       }
       $latest_install_container = Join-Path $latest_sharepath $latest_install_container
       Write-Verbose "Install container  $latest_install_container"
-      
+
       $file.InstallScript | % {
-      
+
         $install_script_format    = $_.InstallScriptFormat
         $install_script_format    = $install_script_format -Replace '\[\[DATETIME\]\]', '*'
         $install_script_format    = $install_script_format -Replace '\[\[VERSION\]\]', '*'
         $install_script_format    = $install_script_format -Replace '\[\[ENVIRONMENT\]\]', $environment
         Write-Verbose "Install script format    $install_script_format"
-      
+
         try {
           Import-Module Pscx -Verbose:$false
         } catch {
@@ -366,12 +369,12 @@ Param( )
           Exit 0
         }
         $install_script_location = Join-Path $install_script_share $latest_release
-      
+
         #if ( Test-Path $install_script_location ){
         #    Write-Verbose "Removing existing script from $install_script_location"
         #    Remove-Item $install_script_location -Recurse -Force
         #}
-      
+
         if ( -not (Test-Path $install_script_location) ){
             Write-Verbose "Creating $install_script_location"
             New-Item $install_script_location -Type Directory | Out-Null
@@ -402,13 +405,14 @@ Function Run-Installer {
 [CmdLetBinding()]
 Param()
   Write-Host "Run-Installer"
-  $config = Get-Config
+  $config = Get-RTConfig
 
-  $env_config = Get-Environment-Config $config $env:COMPUTERNAME -IsRegex
+  $env_config = Get-RTEnvironment-Config $config $env:COMPUTERNAME -IsRegex
 
   $environment   = $env_config.Name
   $remote_user   = $env_config.RemoteUser
   $remote_pass   = $env_config.RemotePassword
+  $remote_pass   = [System.Text.Encoding]::UNICODE.GetString([System.Convert]::FromBase64String($remote_pass))
   Write-Verbose "environment:   $environment"
   Write-Verbose "remote_user:   $remote_user"
 
@@ -417,15 +421,15 @@ Param()
   $password = ConvertTo-SecureString $remote_pass -AsPlainText -Force
   $credentials = New-Object System.Management.Automation.PsCredential($remote_user,$password)
 
-  
+
   $config.ReleaseFiles.File | ? { $_.InstallScript -ne $null } |  % {
     $file = $_
     $install_servers = $file.InstallServer.Split(",")
-    
+
     $install_servers | % {
       $install_server = $_
       $install_location = $file.InstallLocation
-      
+
       $install_script_share = Join-Path "\\$install_server" $install_location
 
       $latest = Get-ChildItem $install_script_share | ? { $_.PSIsContainer -and $_.name -match '\d{12}' } | Sort-Object Name -Descending | Select-Object -First 1
@@ -441,7 +445,7 @@ Param()
         $install_script_format    = $install_script_format -Replace '\[\[ENVIRONMENT\]\]', $environment
         Write-Verbose "Trying to match $install_script_format"
         Write-Verbose "Trying to match in directory $latest_scripts"
-        
+
 
 
         $latest_file = Get-ChildItem $latest_scripts | ? { $_.Name -like $install_script_format }
