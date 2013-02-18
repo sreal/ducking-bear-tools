@@ -1,0 +1,24 @@
+<Configuration>
+  <!-- setup where the files are coming from -->
+  <BuildServer releaseDirectory='[[directory-where-the-build-server-builds-to]]' />
+  <!-- setup where the environments -->
+  <Environments>
+    <Environment Name='[[environment-identifier]]'
+                 GatewayBox='[[management-box]]'
+                 GatewayShare='[[temp-directory-onmanagement-box]]'
+                 ReleaseBox='[[release-box]]'
+                 ReleaseShare='[[storage-on-release-server_can-use-[[DATETIME]]'
+                 RemoteUser="[[domain]]\[[username]]"
+                 RemotePassword="[{b64[[environment-identifier]][[password]]}]" />
+  </Environments>
+  <!-- list the files that are created by the build server in releaseDirectory -->
+  <ReleaseFiles>
+    <!--  Note This muist be a flat directory of files. No directories or folders. -->
+    <File format='[[ENVIRONMENT]]_[[DATE]].zip' />
+    <File format='Release-Scripts-[[VERSION]].zip' InstallServer='[[installation-server]]' InstallLocation='[[path-to-installation-dir]]' >
+      <InstallScript InstallScriptFormat="Installer-[[VERSION]]-[[ENVIRONMENT]].bat" Type='batch' Order='0'/>
+      <InstallScript InstallScriptFormat="Installer2.ps1" Type='powershell' Order='1'/>
+    </File>
+  </ReleaseFiles>
+
+</Configuration>
