@@ -19,7 +19,7 @@ Param(
 
   Try {
     Write-Verbose 'Getting Configuration'
-    $cfg = Get-Config $ConfigFile
+    $cfg = Get-STConfig $ConfigFile
     $environment = $cfg.Site.Setup.environment
     $root_dir    = $cfg.Site.root.location
     $psScripts     = $cfg.Site.Setup.Scripts.powershell
@@ -51,13 +51,13 @@ For Example. Updates to the web.config. (y to continue)'
     }
 
     Write-Verbose 'Running Addition Setup Scripts'
-    foreach ($script in $psScripts) {
+    Foreach ($script in $psScripts) {
       $file = $script.file -Replace '\[\[BASE\]\]', $root_dir
       $arguments = $script.arguments -Replace '\[\[BASE\]\]', $root_dir
-      if (Test-Path $file) {
+      If (Test-Path $file) {
         &"$file $args"
         Write-Verbose "Script run [$file $args]"
-      } else {
+      } Else {
         Write-Verbose "Script not found [$file]"
       }
     }
@@ -155,7 +155,7 @@ GO
      }
 
      write-Verbose 'Getting Configuration'
-     $cfg = Get-Config $ConfigFile
+     $cfg = Get-STConfig $ConfigFile
 
      $super_usr    = $cfg.Database.user.name
      $super_pwd    = $cfg.Database.user.password
@@ -177,8 +177,8 @@ GO
      $SQL_restore_sync = $SQL_restore_sync.Replace( "[[catalogue]]",    $catalogue     )
      $SQL_restore_sync = $SQL_restore_sync.Replace( "[[mdf_name]]",     $mdf_name      )
      $SQL_restore_sync = $SQL_restore_sync.Replace( "[[ldf_name]]",     $ldf_name      )
-     $SQL_restore_sync = $SQL_restore_sync.Replace( "[[mdf_path]]", $mdf_path      )
-     $SQL_restore_sync = $SQL_restore_sync.Replace( "[[ldf_path]]", $ldf_path      )
+     $SQL_restore_sync = $SQL_restore_sync.Replace( "[[mdf_path]]",     $mdf_path      )
+     $SQL_restore_sync = $SQL_restore_sync.Replace( "[[ldf_path]]",     $ldf_path      )
      $SQL_restore_sync = $SQL_restore_sync.Replace( "[[username]]",     $username      )
      $SQL_restore_sync = $SQL_restore_sync.Replace( "[[password]]",     $password      )
 
@@ -218,7 +218,7 @@ Param(
 )
   Try {
     Write-Verbose 'Getting Configuration'
-    $cfg = Get-Config $ConfigFile
+    $cfg = Get-STConfig $ConfigFile
     $backup_dir= $cfg.Backup.site.location
     $root_dir  = $cfg.Site.root.location
     $files     = $cfg.Site.Include
@@ -278,7 +278,7 @@ Param(
   GO
   "
     Write-Verbose 'Getting Configuration'
-    $cfg = Get-Config $ConfigFile
+    $cfg = Get-STConfig $ConfigFile
 
     $super_usr = $cfg.Database.user.name
     $super_pwd = $cfg.Database.user.password
@@ -343,7 +343,7 @@ Param(
 }
 
 
-Function Get-Config {
+Function Get-STConfig {
 [CmdletBinding()]
 Param(
   [string]$File
@@ -357,7 +357,48 @@ Param(
 }
 
 
-Function Create-Schedule {
+
+
+Function Remove-Old-Backups {
+[CmdletBinding()]
+Param(
+  [Parameter(Mandatory=$true)][String] $ConfigFile,
+  $BackupCountToKeep = 7
+)
+  Try {
+    Write-Verbose 'Getting Configuration'
+    $cfg = Get-STConfig $ConfigFile
+    $backup_dir= $cfg.Backup.site.location
+    $root_dir  = $cfg.Site.root.location
+
+    Write-Verbose "Get files to remove"
+    Write-Verbose 'Removing Backup Files from $backup_dir'
+    Write-Verbose 'Keeping $BackupCountToKeep more recent entries'
+
+    Write-Host "Removing Files"
+    $dbBackups = Get-ChildItem $backup_dir -File | ? Name -match '\d{8}.*\.bak' | Sort CreationTime -Descending | Select -Skip $BackupCountToKeep
+    $dbBackups | % { Write-Verbose ("Removing " + $_.FullName) }
+    $dbBackups | % { Remove-Item $_.FullName -Force }
+
+    Write-Host "Removing Directories"
+    $dirBackups = Get-ChildItem $backup_dir -Directory | ? Name -match '\d{6}' | Sort CreationTime -Descending | Select -Skip $BackupCountToKeep
+    $dirBackups | % { Write-Verbose ("Removing " + $_.FullName )}
+    $dirBackups | % { Remove-Item $_.FullName -Force -Recurse }
+
+    Write-Host "
+  Backups Removed.
+
+Location:
+  Files:   $backup_dir
+
+Thanks for playing...
+"
+  } Catch [Exception] {
+    Write-Error $_.Exception.Message
+  }
+}
+
+Function Create-Backup-Schedule {
 [CmdletBinding()]
 Param(
   [Parameter(Mandatory=$true)][String] $ConfigFile
@@ -368,7 +409,7 @@ Param(
     $this_file = $PSCommandPath
 
     Write-Verbose 'Getting Configuration'
-    $cfg = Get-Config $ConfigFile
+    $cfg = Get-STConfig $ConfigFile
     $name = $cfg.Schedule.Job.name
     $time = $cfg.Schedule.Job.time
 
@@ -394,8 +435,46 @@ Param(
   }
 }
 
+Function Create-Cleanup-Schedule {
+[CmdletBinding()]
+Param(
+  [Parameter(Mandatory=$true)][String] $ConfigFile
+)
+  Try {
+    Import-Module PSScheduledJob
+
+    $this_file = $PSCommandPath
+
+    Write-Verbose 'Getting Configuration'
+    $cfg = Get-STConfig $ConfigFile
+    $name = $cfg.Schedule.Job.name+ "_cleanup"
+    $time = $cfg.Schedule.Job.cleanuptime
+
+    Write-Verbose 'Unregistering Job'
+    Unregister-ScheduledJob $name -ErrorAction SilentlyContinue
+
+    Write-Verbose 'Creating Trigger'
+    $trigger = New-JobTrigger -Daily -At $time
+
+    Write-Verbose 'Creating Options'
+    $option = New-ScheduledJobOption -RunElevated
+
+    Write-Verbose 'Registering Job'
+    Register-ScheduledJob -Name $name -Trigger $trigger  -ArgumentList $ConfigFile,$this_file  -ScriptBlock {
+        $ConfigFile,$this_file = $args
+        . $this_file
+        Remove-Old-Backups -ConfigFile $ConfigFile
+      }
+  } Catch [Exception] {
+  } Finally {
+    Remove-Module PSScheduledJob
+  }
+}
+
+
 
 Clear-host
 #Restore-Database -ConfigFile configs/default.xml
-Restore-Database -ConfigFile configs/default.xml -DatabaseBackup "D:\Backup\boo.bak" -Verbose
+#Restore-Database -ConfigFile configs/default.xml -DatabaseBackup "D:\Backup\boo.bak" -Verbose
 #Restore-Folder   -ConfigFile configs/default.xml -Folder "C:\projects\tmp\umbraco\tmp\20121227\site-201212271627" -verbose
+#Remove-Old-Backups -ConfigFile  '.\site-tools-config\youthhq-stage.xml' -Verbose
