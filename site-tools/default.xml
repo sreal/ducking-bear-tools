@@ -1,0 +1,32 @@
+<Project>
+
+  <Schedule>
+    <Job name='schdule-job-name' time='time eg 1:00PM' cleanuptime='time eg 3:00PM' />
+  </Schedule>
+
+  <Backup>
+    <database location='data-base-backup-folder-must_be_on_database_server' />
+    <site     location='website-backup-folder' />
+  </Backup>
+
+  <Database>
+    <user name='admin' password='password' />
+    <connection server='databaseserver' catalogue='database-name' username='db-user-to-sync' password='db-login-password'/>
+    <Files>
+      <mdf location='mdf-location-must_be_on_database_server' />
+      <ldf location='ldf-location-must_be_on_database_server'>
+  </Database>
+
+  <Site>
+    <root location="website-root-location" />
+    <Include>
+      <path>*</path>
+    </Include>
+    <Setup>
+      <Scripts>
+        <powershell file='[[BASE]]\script.ps1' arguments='[[BASE]]' /> <!-- [[BASE]] is the base of the folder being restored -->
+      </Scripts>
+    </Setup>
+  </Site>
+
+</Project>
